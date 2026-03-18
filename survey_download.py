@@ -464,13 +464,17 @@ class SurveyDownloader:
             return {"status": "error", "message": data.get("resultDesc", "Unknown error")}
 
         surveys = data.get("dataList", [])
+        # status 字段含义: 0=未发布, 1=回收中, 2=已停止回收, 3=已关闭
+        _STATUS_MAP = {0: "未发布", 1: "回收中", 2: "已停止", 3: "已关闭"}
         results = []
         for s in surveys:
+            raw_status = s.get("status", -1)
             results.append({
                 "id": s.get("id"),
                 "name": s.get("surveyName", ""),
-                "status": s.get("statusName", ""),
-                "responses": s.get("paperCount", 0),
+                "status": raw_status,
+                "statusLabel": _STATUS_MAP.get(raw_status, f"未知({raw_status})"),
+                "responses": s.get("recycleCount", 0),
                 "createTime": s.get("createTime", ""),
             })
 
@@ -587,7 +591,11 @@ class SurveyDownloader:
     # ── 获取问卷创建时间 ─────────────────────────────────────────────────
 
     def get_create_time(self, survey_id):
-        """获取问卷创建时间（用于默认时间范围的起点）"""
+        """
+        获取问卷的数据时间范围（用于导出的起止时间）。
+        API 返回 {"begin": 毫秒时间戳, "end": 毫秒时间戳, ...}
+        返回: (begin_ts, end_ts) 元组，或 None
+        """
         try:
             resp = self.session.get(
                 f"{BASE_URL}{API_CREATE_TIME}",
@@ -595,7 +603,15 @@ class SurveyDownloader:
             )
             data = resp.json()
             if data.get("resultCode") == 100 and data.get("data"):
-                return data["data"]  # 可能是时间戳或字符串
+                inner = data["data"]
+                if isinstance(inner, dict):
+                    begin = inner.get("begin") or inner.get("selectBegin")
+                    end = inner.get("end") or inner.get("selectEnd")
+                    if begin and end:
+                        return (int(begin), int(end))
+                # 兼容：如果返回的是单个时间戳
+                if isinstance(inner, (int, float)):
+                    return (int(inner), None)
         except Exception as e:
             _log(f"get_create_time failed: {e}")
         return None
@@ -858,7 +874,30 @@ class SurveyDownloader:
 
         _log(f"Target survey: [{target_id}] {target_name}")
 
-        # 2.5 自动清洗（如果启用）
+        # 2.5 检查问卷状态：未发布(status=0)的问卷没有统计分析功能
+        # 查找该问卷的 status（搜索结果中或重新搜索获取）
+        survey_status = None
+        survey_responses = 0
+        check_result = self.search_surveys()
+        if check_result.get("status") == "success":
+            for s in check_result.get("surveys", []):
+                if s["id"] == target_id:
+                    survey_status = s.get("status")
+                    survey_responses = s.get("responses", 0)
+                    break
+
+        if survey_status == 0:
+            return {
+                "status": "not_collecting",
+                "message": f"问卷「{target_name}」(ID:{target_id}) 尚未发布或未开始回收，没有统计分析功能，无法导出数据。请先在问卷系统中发布并回收数据后再试。",
+                "survey_id": target_id,
+                "survey_name": target_name,
+            }
+
+        if survey_responses == 0 and survey_status is not None:
+            _log(f"WARNING: Survey has 0 responses (status={survey_status})")
+
+        # 2.6 自动清洗（如果启用）
         clean_result = None
         if clean:
             _log("Running auto-clean...")
@@ -883,23 +922,20 @@ class SurveyDownloader:
         _log(f"Question count: {len(questions)}")
 
         # 4. 确定时间范围
+        # 获取服务端记录的数据时间范围
+        time_range = self.get_create_time(target_id)
+
         if start_date:
             begin_ts = int(datetime.strptime(start_date, "%Y-%m-%d").timestamp() * 1000)
+        elif time_range and isinstance(time_range, tuple):
+            begin_ts = time_range[0]
         else:
-            # 默认：获取问卷创建时间，或回退到 2 年前
-            create_time = self.get_create_time(target_id)
-            if create_time and isinstance(create_time, (int, float)):
-                begin_ts = int(create_time)
-            elif create_time and isinstance(create_time, str):
-                try:
-                    begin_ts = int(datetime.strptime(create_time, "%Y-%m-%d %H:%M:%S").timestamp() * 1000)
-                except ValueError:
-                    begin_ts = int((datetime.now() - timedelta(days=730)).timestamp() * 1000)
-            else:
-                begin_ts = int((datetime.now() - timedelta(days=730)).timestamp() * 1000)
+            begin_ts = int((datetime.now() - timedelta(days=730)).timestamp() * 1000)
 
         if end_date:
             end_ts = int(datetime.strptime(end_date, "%Y-%m-%d").timestamp() * 1000)
+        elif time_range and isinstance(time_range, tuple) and time_range[1]:
+            end_ts = time_range[1]
         else:
             end_ts = int(datetime.now().timestamp() * 1000)
 
@@ -1044,6 +1080,16 @@ def main():
         _json_output(result)
 
     elif args.command == "clean":
+        # 清洗前检查问卷状态
+        pre_check = downloader.search_surveys()
+        if pre_check.get("status") == "success":
+            for s in pre_check.get("surveys", []):
+                if s["id"] == args.id and s.get("status") == 0:
+                    _json_output({
+                        "status": "not_collecting",
+                        "message": f"问卷 (ID:{args.id}) 尚未发布或未开始回收，无法配置清洗条件。",
+                    })
+                    return
         dry_run = getattr(args, 'dry_run', False)
         result = downloader.auto_clean(args.id, dry_run=dry_run)
         _json_output(result)

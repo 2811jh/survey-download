@@ -61,4 +61,5 @@ python {SKILL_DIR}/survey_download.py search --name "关键词"
    - `"error"` → 将 `message` 翻译为用户友好语言告知原因，常见：认证失败、网络超时
    - `"no_match"` → 告知用户未找到匹配问卷，建议换关键词或直接提供问卷 ID
    - `"multiple_matches"` → 用 `ask_user_question` 展示匹配列表让用户选择
+   - `"not_collecting"` → 问卷尚未发布/未回收，没有统计分析功能，告知用户需先发布回收
    - `"warning"` → 操作部分成功，将警告内容告知用户
