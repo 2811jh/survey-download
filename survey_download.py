@@ -733,10 +733,21 @@ class SurveyDownloader:
         file_size = os.path.getsize(filepath)
         _log(f"Downloaded: {filepath} ({file_size:,} bytes)")
 
-        # 检测是否为 ZIP 压缩包（服务端大文件会自动压缩）
+        # 检测是否为 ZIP 压缩包（服务端大文件会自动压缩为 ZIP 内含多个 CSV/XLSX 分片）
+        # 注意：XLSX 本身也是 ZIP 格式，需要区分"真正的分片 ZIP"和"正常的 XLSX"
         import zipfile
+        is_data_zip = False
         if zipfile.is_zipfile(filepath):
-            _log(f"Detected ZIP archive, extracting...")
+            with zipfile.ZipFile(filepath, 'r') as zf:
+                member_names = zf.namelist()
+                # 如果 ZIP 里包含 .csv 或 .xlsx 文件，说明是服务端分片压缩包
+                data_files = [n for n in member_names if n.lower().endswith(('.csv', '.xlsx'))]
+                is_data_zip = len(data_files) > 0
+                if not is_data_zip:
+                    _log(f"File is a valid XLSX (ZIP with {len(member_names)} Office XML parts), keeping as-is")
+
+        if is_data_zip:
+            _log(f"Detected data ZIP archive ({len(data_files)} data files), extracting...")
             extract_dir = output_dir
             extracted_files = []
             with zipfile.ZipFile(filepath, 'r') as zf:
