@@ -621,7 +621,7 @@ class SurveyDownloader:
     def trigger_export(self, survey_id, data_type, begin, end, questions):
         """
         触发数据导出
-        data_type: 1=文本数据, 0=量化数据
+        data_type: 0=文本数据, 1=量化数据
         begin/end: 毫秒时间戳
         questions: 题目列表（带 selected=1）
         """
@@ -681,7 +681,7 @@ class SurveyDownloader:
     def download_file(self, survey_id, data_type, output_dir, begin_ts=None, end_ts=None):
         """
         下载已导出的文件
-        data_type: 1=文本数据, 0=量化数据
+        data_type: 0=文本数据, 1=量化数据
         begin_ts/end_ts: 毫秒时间戳，用于文件名中的数据周期
         返回: 下载后的文件绝对路径，失败返回 None
         """
@@ -709,13 +709,14 @@ class SurveyDownloader:
                     orig_filename = unquote(match.group(1).strip())
 
         # 确定扩展名
+        # dataType: 0=文本数据(xlsx), 1=量化数据(csv)
         if orig_filename:
             ext = os.path.splitext(orig_filename)[1]  # 如 .csv 或 .xlsx
         else:
-            ext = ".csv" if data_type == 1 else ".xlsx"
+            ext = ".xlsx" if data_type == 0 else ".csv"
 
         # 构建文件名：survey_{id}【文本数据/量化数据】{起始日期}-{结束日期}_{时间戳}{ext}
-        type_label = "文本数据" if data_type == 1 else "量化数据"
+        type_label = "文本数据" if data_type == 0 else "量化数据"
         now_ts = int(time.time())
         if begin_ts and end_ts:
             begin_str = datetime.fromtimestamp(begin_ts / 1000).strftime("%Y%m%d")
@@ -953,11 +954,12 @@ class SurveyDownloader:
         _log(f"Time range: {datetime.fromtimestamp(begin_ts/1000)} ~ {datetime.fromtimestamp(end_ts/1000)}")
 
         # 5. 确定导出类型
+        # 网易问卷 API：dataType=0 是文本数据(xlsx)，dataType=1 是量化数据(csv)
         types_to_export = []
         if export_type in ("both", "text"):
-            types_to_export.append((1, "text"))
+            types_to_export.append((0, "text"))
         if export_type in ("both", "quantified"):
-            types_to_export.append((0, "quantified"))
+            types_to_export.append((1, "quantified"))
 
         # 6. 触发导出
         for dt, dt_name in types_to_export:
