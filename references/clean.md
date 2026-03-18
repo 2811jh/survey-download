@@ -52,7 +52,7 @@ python {SKILL_DIR}/survey_download.py clean --id 问卷ID --dry-run
 python {SKILL_DIR}/survey_download.py clean --id 问卷ID
 ```
 
-**清洗+下载**：
+**清洗+下载**（确认后直接下载，具体下载参数详见 `download.md`）：
 ```bash
 python {SKILL_DIR}/survey_download.py download --id 问卷ID --clean --output_dir "目录"
 ```

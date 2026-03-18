@@ -1032,6 +1032,14 @@ def main():
                 _json_output({"status": "error", "message": "认证无效，自动刷新失败。请手动运行 init 命令。"})
 
     elif args.command == "search":
+        # 搜索前先检查认证，失败时自动刷新
+        if not downloader.check_auth():
+            _log("Auth invalid for search, attempting auto-refresh...")
+            if downloader._auto_refresh_cookie():
+                downloader = SurveyDownloader()  # 重新加载
+            else:
+                _json_output({"status": "error", "message": "认证无效，自动刷新失败。请手动运行 init 命令。"})
+                return
         result = downloader.search_surveys(args.name, args.page)
         _json_output(result)
 
