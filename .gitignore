@@ -1,8 +1,8 @@
 # 敏感配置（包含 Cookie/Token）
 config.json
 
-# 浏览器 session 缓存
-.browser_profile/
+# 浏览器 session 缓存（每个平台独立）
+.browser_profile*/
 
 # 测试输出
 test_output/

@@ -404,11 +404,12 @@ class SurveyDownloader:
         # 从 config 加载平台（如果未通过参数指定）
         if not self.platform and config.get("platform"):
             self.platform = config["platform"]
-        # 确定 cookie domain
+        # 确定 cookie domain 并加载所有 Cookie
         pf_key = self.platform or DEFAULT_PLATFORM
         domain = PLATFORMS.get(pf_key, PLATFORMS[DEFAULT_PLATFORM])["domain"]
         for name, value in config.get("cookies", {}).items():
-            self.session.cookies.set(name, value, domain=domain)
+            if value:  # 跳过空值
+                self.session.cookies.set(name, value, domain=domain)
         return True
 
     def save_config(self, cookies_dict):
@@ -1055,7 +1056,7 @@ def main():
 
     # ── init: 初始化 Cookie ──────────────────────────────────────────────
     init_p = subparsers.add_parser("init", help="初始化 Cookie 配置")
-    init_p.add_argument("--survey_token", required=True, help="SURVEY_TOKEN cookie")
+    init_p.add_argument("--survey_token", required=False, default="", help="SURVEY_TOKEN cookie（国内必须，国外可选）")
     init_p.add_argument("--jsessionid", required=True, help="JSESSIONID cookie")
     init_p.add_argument("--p_info", default="", help="P_INFO cookie (optional)")
 
@@ -1095,7 +1096,9 @@ def main():
 
     # ── 执行命令 ─────────────────────────────────────────────────────────
     if args.command == "init":
-        cookies = {"SURVEY_TOKEN": args.survey_token, "JSESSIONID": args.jsessionid}
+        cookies = {"JSESSIONID": args.jsessionid}
+        if args.survey_token:
+            cookies["SURVEY_TOKEN"] = args.survey_token
         if args.p_info:
             cookies["P_INFO"] = args.p_info
         downloader.save_config(cookies)
