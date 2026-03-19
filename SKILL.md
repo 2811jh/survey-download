@@ -34,24 +34,26 @@ description: |
 | 清洗并下载 | 先读 `clean.md` 完成确认，再读 `download.md` 执行下载 | "清洗并下载问卷xxx" |
 | Cookie 问题 | `{SKILL_DIR}/references/cookie.md` | "登录过期了"、"Cookie 怎么更新" |
 
-## 平台切换
+## 平台判断
 
-支持双平台，通过 `--platform` 参数切换（首次指定后会记住，后续无需重复指定）：
+支持国内 / 国外双平台。**每次任务开始前必须先确定平台**：
+
+**自动判断**——用户明确提到以下关键词时无需询问：
+- 国内：`国内`、`163`、`survey-game.163.com`
+- 国外：`国外`、`海外`、`intl`、`easebar`、`survey-game.easebar.com`
+
+**主动询问**——用户没有提及平台时，用 `ask_user_question` 让用户选择：
+```
+问题：这个问卷在哪个平台？
+选项：["国内问卷平台 survey-game.163.com（Recommended）", "国外问卷平台 survey-game.easebar.com"]
+```
+
+确定平台后，通过 `--platform cn` 或 `--platform intl` 传给脚本。首次指定后会记住，后续同平台操作可省略。
 
 | 参数值 | 平台 | 域名 |
 |--------|------|------|
-| `cn`（默认） | 国内 | survey-game.163.com |
+| `cn` | 国内 | survey-game.163.com |
 | `intl` | 国外 | survey-game.easebar.com |
-
-```bash
-# 国内平台（默认，可省略）
-python {SKILL_DIR}/survey_download.py search --name "关键词"
-
-# 国外平台（首次需指定，之后自动记住）
-python {SKILL_DIR}/survey_download.py --platform intl search --name "关键词"
-```
-
-当用户提到"国外问卷"、"海外问卷"、"easebar"时，使用 `--platform intl`。
 
 ## 快速开始
 
