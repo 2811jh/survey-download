@@ -1,6 +1,6 @@
 # survey-download
 
-从网易问卷系统（survey-game.163.com）下载问卷原始数据，支持自动数据清洗。
+从网易问卷系统下载问卷原始数据，支持自动数据清洗。支持国内平台（survey-game.163.com）和国外平台（survey-game.easebar.com）。
 
 ## ✨ 功能
 
@@ -72,8 +72,11 @@ survey-download/
 如果不通过 AI 编辑器，也可以直接使用命令行：
 
 ```bash
-# 搜索问卷
+# 搜索问卷（默认国内平台）
 python survey_download.py search --name "满意度"
+
+# 切换到国外平台（首次指定后自动记住）
+python survey_download.py --platform intl search --name "满意度"
 
 # 下载问卷数据
 python survey_download.py download --id 90450 --output_dir "./data"

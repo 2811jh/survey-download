@@ -18,7 +18,11 @@ import sys
 import time
 
 
-SURVEY_URL = "https://survey-game.163.com/index.html#/surveylist"
+# 双平台支持
+PLATFORM_URLS = {
+    "cn": "https://survey-game.163.com/index.html#/surveylist",
+    "intl": "https://survey-game.easebar.com/index.html#/surveylist",
+}
 SCRIPT_DIR = os.path.dirname(os.path.abspath(__file__))
 CONFIG_PATH = os.path.join(SCRIPT_DIR, "config.json")
 PROFILE_DIR = os.path.join(SCRIPT_DIR, ".browser_profile")
@@ -31,7 +35,7 @@ def _log(msg):
     print(f"[refresh_cookie] {msg}", flush=True)
 
 
-def refresh_cookie(timeout=300):
+def refresh_cookie(timeout=300, platform="cn"):
     """
     自动刷新 Cookie。
     1. 打开浏览器访问问卷系统
@@ -39,8 +43,10 @@ def refresh_cookie(timeout=300):
     3. 如果没有，等待用户手动登录
     4. 检测到 SURVEY_TOKEN 后保存到 config.json
 
+    platform: "cn"=国内, "intl"=国外
     返回: True=成功, False=失败
     """
+    survey_url = PLATFORM_URLS.get(platform, PLATFORM_URLS["cn"])
     try:
         from playwright.sync_api import sync_playwright
     except ImportError:
@@ -60,8 +66,8 @@ def refresh_cookie(timeout=300):
         )
 
         page = context.pages[0] if context.pages else context.new_page()
-        _log(f"Navigating to {SURVEY_URL}")
-        page.goto(SURVEY_URL, wait_until="domcontentloaded")
+        _log(f"Navigating to {survey_url}")
+        page.goto(survey_url, wait_until="domcontentloaded")
 
         _log("Waiting for login cookies...")
         _log("(If you see the login page, please log in manually. The script will auto-detect.)")
@@ -88,8 +94,9 @@ def refresh_cookie(timeout=300):
                     }""")
                     if resp.get("resultCode") == 100:
                         _log("Cookies verified successfully!")
-                        # 保存到 config.json
+                        # 保存到 config.json（含平台信息）
                         config = {
+                            "platform": platform,
                             "cookies": cookie_dict,
                             "updated_at": time.strftime("%Y-%m-%dT%H:%M:%S"),
                         }
@@ -117,9 +124,11 @@ def main():
     import argparse
     parser = argparse.ArgumentParser(description="自动刷新网易问卷系统 Cookie")
     parser.add_argument("--timeout", type=int, default=300, help="等待登录超时（秒，默认300）")
+    parser.add_argument("--platform", choices=["cn", "intl"], default="cn",
+                        help="平台: cn=国内, intl=国外（默认 cn）")
     args = parser.parse_args()
 
-    success = refresh_cookie(timeout=args.timeout)
+    success = refresh_cookie(timeout=args.timeout, platform=args.platform)
     if success:
         _log("✓ Cookie refresh completed!")
         # 输出 JSON 结果

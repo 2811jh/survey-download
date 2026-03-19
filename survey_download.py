@@ -40,7 +40,21 @@ from urllib.parse import unquote
 
 # ─── 常量配置 ────────────────────────────────────────────────────────────────
 
-BASE_URL = "https://survey-game.163.com"
+# 双平台支持：国内(cn) / 国外(intl)
+PLATFORMS = {
+    "cn": {
+        "base_url": "https://survey-game.163.com",
+        "domain": "survey-game.163.com",
+        "label": "国内",
+    },
+    "intl": {
+        "base_url": "https://survey-game.easebar.com",
+        "domain": "survey-game.easebar.com",
+        "label": "国外",
+    },
+}
+DEFAULT_PLATFORM = "cn"
+
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.abspath(__file__)), "config.json")
 
 # API 端点
@@ -65,8 +79,6 @@ DEFAULT_HEADERS = {
     "accept": "application/json, text/javascript, */*; q=0.01",
     "accept-language": "zh-CN,zh;q=0.9,en;q=0.8",
     "content-type": "application/json",
-    "origin": BASE_URL,
-    "referer": f"{BASE_URL}/index.html",
     "x-requested-with": "XMLHttpRequest",
     "user-agent": (
         "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
@@ -359,29 +371,50 @@ def build_clean_conditions(questions):
 # ─── 核心类 ──────────────────────────────────────────────────────────────────
 
 class SurveyDownloader:
-    """网易问卷下载器"""
+    """网易问卷下载器（支持国内/国外双平台）"""
 
-    def __init__(self, config_path=None):
+    def __init__(self, config_path=None, platform=None):
         self.config_path = config_path or CONFIG_FILE
         self.session = requests.Session()
         self.session.headers.update(DEFAULT_HEADERS)
+        # 从 config 或参数确定平台
+        self.platform = platform  # 可能为 None，后续从 config 加载
         self._load_config()
+        # 如果 config 中没有平台信息且未指定，默认国内
+        if not self.platform:
+            self.platform = DEFAULT_PLATFORM
+        pf = PLATFORMS[self.platform]
+        self.base_url = pf["base_url"]
+        self.domain = pf["domain"]
+        # 动态设置 origin/referer（根据平台域名）
+        self.session.headers.update({
+            "origin": self.base_url,
+            "referer": f"{self.base_url}/index.html",
+        })
+        _log(f"Platform: {pf['label']} ({self.base_url})")
 
     # ── Cookie 管理 ──────────────────────────────────────────────────────
 
     def _load_config(self):
-        """从 config.json 加载 Cookie"""
+        """从 config.json 加载 Cookie 和平台信息"""
         if not os.path.exists(self.config_path):
             return False
         with open(self.config_path, "r", encoding="utf-8") as f:
             config = json.load(f)
+        # 从 config 加载平台（如果未通过参数指定）
+        if not self.platform and config.get("platform"):
+            self.platform = config["platform"]
+        # 确定 cookie domain
+        pf_key = self.platform or DEFAULT_PLATFORM
+        domain = PLATFORMS.get(pf_key, PLATFORMS[DEFAULT_PLATFORM])["domain"]
         for name, value in config.get("cookies", {}).items():
-            self.session.cookies.set(name, value, domain="survey-game.163.com")
+            self.session.cookies.set(name, value, domain=domain)
         return True
 
     def save_config(self, cookies_dict):
-        """保存 Cookie 到 config.json"""
+        """保存 Cookie 和平台信息到 config.json"""
         config = {
+            "platform": self.platform or DEFAULT_PLATFORM,
             "cookies": cookies_dict,
             "updated_at": datetime.now().isoformat(),
         }
@@ -402,10 +435,10 @@ class SurveyDownloader:
 
         import subprocess
         python_exe = sys.executable
-        _log(f"Running refresh_cookie.py...")
+        _log(f"Running refresh_cookie.py (platform={self.platform})...")
         try:
             result = subprocess.run(
-                [python_exe, refresh_script, "--timeout", "300"],
+                [python_exe, refresh_script, "--timeout", "300", "--platform", self.platform],
                 capture_output=False,
                 timeout=310,
             )
@@ -429,7 +462,7 @@ class SurveyDownloader:
         """检查 Cookie 是否有效（尝试拉取问卷列表）"""
         try:
             resp = self.session.post(
-                f"{BASE_URL}{API_SURVEY_LIST}",
+                f"{self.base_url}{API_SURVEY_LIST}",
                 json={
                     "pageNo": 1, "surveyName": "", "status": "-1",
                     "deliveryRange": -1, "type": -1, "groupId": -1,
@@ -447,7 +480,7 @@ class SurveyDownloader:
     def search_surveys(self, name="", page=1):
         """按名称搜索问卷列表"""
         resp = self.session.post(
-            f"{BASE_URL}{API_SURVEY_LIST}",
+            f"{self.base_url}{API_SURVEY_LIST}",
             json={
                 "pageNo": page,
                 "surveyName": name,
@@ -488,7 +521,7 @@ class SurveyDownloader:
     def get_question_list(self, survey_id):
         """获取问卷的题目列表（用于构建导出请求）"""
         resp = self.session.post(
-            f"{BASE_URL}{API_QUESTION_LIST}",
+            f"{self.base_url}{API_QUESTION_LIST}",
             json={"surveyId": survey_id, "type": "", "keyWord": "", "questionExportList": []},
         )
         data = resp.json()
@@ -506,7 +539,7 @@ class SurveyDownloader:
     def get_question_detail(self, survey_id):
         """获取问卷完整题目结构（含选项 ID 和文本），用于清洗条件构建"""
         resp = self.session.get(
-            f"{BASE_URL}{API_QUESTION_DETAIL}",
+            f"{self.base_url}{API_QUESTION_DETAIL}",
             params={"surveyId": survey_id, "from": "dataclean"},
         )
         data = resp.json()
@@ -524,13 +557,13 @@ class SurveyDownloader:
             "enabled": enabled,
             "conditions": conditions,
         }
-        resp = self.session.post(f"{BASE_URL}{API_SET_DC_CONDITION}", json=body)
+        resp = self.session.post(f"{self.base_url}{API_SET_DC_CONDITION}", json=body)
         return resp.json()
 
     def get_clean_conditions(self, survey_id):
         """获取问卷当前的数据清洗条件"""
         resp = self.session.get(
-            f"{BASE_URL}{API_GET_DC_CONDITION}",
+            f"{self.base_url}{API_GET_DC_CONDITION}",
             params={"surveyId": survey_id},
         )
         return resp.json()
@@ -598,7 +631,7 @@ class SurveyDownloader:
         """
         try:
             resp = self.session.get(
-                f"{BASE_URL}{API_CREATE_TIME}",
+                f"{self.base_url}{API_CREATE_TIME}",
                 params={"surveyId": survey_id},
             )
             data = resp.json()
@@ -633,7 +666,7 @@ class SurveyDownloader:
             "dataType": data_type,
             "questionExportList": questions,
         }
-        resp = self.session.post(f"{BASE_URL}{API_EXPORT_PAPERS}", json=body)
+        resp = self.session.post(f"{self.base_url}{API_EXPORT_PAPERS}", json=body)
         data = resp.json()
         if data.get("resultCode") != 100:
             _log(f"trigger_export(type={data_type}) failed: {data.get('resultDesc')}")
@@ -644,7 +677,7 @@ class SurveyDownloader:
     def check_export_status(self, survey_id):
         """查询导出进度"""
         resp = self.session.get(
-            f"{BASE_URL}{API_EXPORT_STATUS}",
+            f"{self.base_url}{API_EXPORT_STATUS}",
             params={"surveyId": survey_id},
         )
         return resp.json()
@@ -685,7 +718,7 @@ class SurveyDownloader:
         begin_ts/end_ts: 毫秒时间戳，用于文件名中的数据周期
         返回: 下载后的文件绝对路径，失败返回 None
         """
-        url = f"{BASE_URL}{API_DOWNLOAD}"
+        url = f"{self.base_url}{API_DOWNLOAD}"
         resp = self.session.get(
             url,
             params={"surveyId": survey_id, "type": data_type},
@@ -1011,8 +1044,12 @@ class SurveyDownloader:
 
 def main():
     parser = argparse.ArgumentParser(
-        description="网易问卷数据自动下载工具",
+        description="网易问卷数据自动下载工具（支持国内/国外双平台）",
         formatter_class=argparse.RawDescriptionHelpFormatter,
+    )
+    parser.add_argument(
+        "--platform", choices=["cn", "intl"], default=None,
+        help="平台: cn=国内(163.com), intl=国外(easebar.com)。不指定时从 config.json 读取，默认 cn",
     )
     subparsers = parser.add_subparsers(dest="command", help="可用命令")
 
@@ -1054,7 +1091,7 @@ def main():
         parser.print_help()
         return
 
-    downloader = SurveyDownloader()
+    downloader = SurveyDownloader(platform=args.platform)
 
     # ── 执行命令 ─────────────────────────────────────────────────────────
     if args.command == "init":
@@ -1085,7 +1122,7 @@ def main():
         if not downloader.check_auth():
             _log("Auth invalid for search, attempting auto-refresh...")
             if downloader._auto_refresh_cookie():
-                downloader = SurveyDownloader()  # 重新加载
+                downloader = SurveyDownloader(platform=args.platform)  # 重新加载
             else:
                 _json_output({"status": "error", "message": "认证无效，自动刷新失败。请手动运行 init 命令。"})
                 return

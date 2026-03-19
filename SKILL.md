@@ -1,11 +1,13 @@
 ---
 name: survey_download
 description: |
-  从网易问卷系统（survey-game.163.com）下载问卷原始数据并自动数据清洗。
+  从网易问卷系统下载问卷原始数据并自动数据清洗。
+  支持国内平台（survey-game.163.com）和国外平台（survey-game.easebar.com）。
   通过问卷 ID 或名称定位问卷，导出文本数据和量化数据。
   支持自动配置服务端清洗条件（剔除无效问卷：答题过快、选项雷同、人口学冲突、满意度-NPS矛盾）。
   当用户提到"下载问卷"、"导出问卷数据"、"帮我下数据"、"download survey"、
-  "export 问卷"、"清洗问卷"、"筛选无效数据"、"帮我筛一下再导出"等场景时使用。
+  "export 问卷"、"清洗问卷"、"筛选无效数据"、"帮我筛一下再导出"、
+  "下载国外问卷"、"从 easebar 导出"等场景时使用。
   关键区分：本 skill 负责从问卷平台"下载/导出/清洗原始数据"；
   如果用户已有数据文件、需要"分析/统计/出报告"，那属于 survey-research 的职责。
 ---
@@ -31,6 +33,25 @@ description: |
 | 清洗/筛选数据 | `{SKILL_DIR}/references/clean.md` | "清洗一下这份问卷"、"帮我筛选数据" |
 | 清洗并下载 | 先读 `clean.md` 完成确认，再读 `download.md` 执行下载 | "清洗并下载问卷xxx" |
 | Cookie 问题 | `{SKILL_DIR}/references/cookie.md` | "登录过期了"、"Cookie 怎么更新" |
+
+## 平台切换
+
+支持双平台，通过 `--platform` 参数切换（首次指定后会记住，后续无需重复指定）：
+
+| 参数值 | 平台 | 域名 |
+|--------|------|------|
+| `cn`（默认） | 国内 | survey-game.163.com |
+| `intl` | 国外 | survey-game.easebar.com |
+
+```bash
+# 国内平台（默认，可省略）
+python {SKILL_DIR}/survey_download.py search --name "关键词"
+
+# 国外平台（首次需指定，之后自动记住）
+python {SKILL_DIR}/survey_download.py --platform intl search --name "关键词"
+```
+
+当用户提到"国外问卷"、"海外问卷"、"easebar"时，使用 `--platform intl`。
 
 ## 快速开始
 

@@ -26,7 +26,9 @@ python {SKILL_DIR}/refresh_cookie.py
 
 如果 Playwright 不可用（未安装），引导用户：
 
-1. 浏览器访问 `https://survey-game.163.com/index.html#/surveylist`
+1. 浏览器访问对应平台：
+   - 国内：`https://survey-game.163.com/index.html#/surveylist`
+   - 国外：`https://survey-game.easebar.com/index.html#/surveylist`
 2. `Ctrl+Shift+I` → 「应用程序」→「Cookie」→ 找到 `SURVEY_TOKEN` 和 `JSESSIONID`
 3. 执行：
 
